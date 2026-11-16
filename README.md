@@ -43,3 +43,11 @@ Luego visita `http://localhost:3000`.
 - 3 vidas con invencibilidad temporal al reaparecer (parpadeo)
 - Asteroides se parten en fragmentos más pequeños al ser destruidos
 - Partículas de explosión al destruir asteroides
+
+## Power-ups
+
+| Power-up      | Efecto                                                        |
+| ------------- | ------------------------------------------------------------- |
+| **Velocidad** | Doble propulsión durante 5 segundos (la nave se ve celeste)   |
+
+Al destruir un asteroide hay un 14 % de probabilidad de que suelte el power-up **Velocidad** (doble chevrón celeste). Se recoge tocándolo con la nave, flota por la pantalla y desaparece a los 14 segundos (parpadea en los últimos 3).
