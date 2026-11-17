@@ -107,6 +107,7 @@ classDiagram
       +invincible
       +speedTimer
       +rapidTimer
+      +tripleTimer
       +thrusting
       +update(dt)
       +tryShoot()
@@ -155,8 +156,8 @@ classDiagram
     Ship ..> Bullet : tryShoot()
     Asteroid ..> Asteroid : split() crea 2
     ShootingStar --|> Asteroid : hereda
-    ShootingStar ..> PowerUp : suelta "cadencia"
-    PowerUp ..> Ship : speedTimer / rapidTimer
+    ShootingStar ..> PowerUp : suelta "cadencia" o "triple"
+    PowerUp ..> Ship : speedTimer / rapidTimer / tripleTimer
 ```
 
 Contrato común: cada clase expone `update(dt)`, `draw()` y un flag booleano `dead`. El `update` global llama a todas y luego hace `array = array.filter(e => !e.dead)` — no se eliminan objetos a mitad de iteración.
@@ -168,7 +169,7 @@ Contrato común: cada clase expone `update(dt)`, `draw()` y un flag booleano `de
 | `Asteroid` | Roca poligonal irregular que se parte | `RADII`, `SPEEDS`, `POINTS` (`game.js:61-63`) |
 | `ShootingStar` | Asteroide especial rápido que se desvanece y suelta cadencia | `STAR_*` (`game.js:122-126`) |
 | `Particle` | Escombro visual, sin colisión | `life = 0.4–1.1 s` |
-| `PowerUp` | Bonus flotante de velocidad o cadencia | `POWERUP_*`, `RAPID_*` (`game.js:194-200`) |
+| `PowerUp` | Bonus flotante de velocidad, cadencia o disparo triple | `POWERUP_*`, `RAPID_*`, `TRIPLE_*` (`game.js:194-202`) |
 
 ## Colisiones
 
@@ -176,8 +177,8 @@ Todo se resuelve cada frame en `update()`, con distancia entre centros (`dist()`
 
 | Colisión | Condición | Efecto |
 | --- | --- | --- |
-| Bala × asteroide | `dist(b, a) < a.radius` | Suma `a.points`, `explode()`, parte la roca. La estrella fugaz no se parte y suelta **siempre** `'cadencia'`; el resto intenta `maybeDropPowerUp()` (14 %) |
-| Nave × power-up | `dist(ship, p) < ship.radius + p.radius` | `ship.speedTimer = 5` (`'velocidad'`) o `ship.rapidTimer = 6` (`'cadencia'`) + partículas |
+| Bala × asteroide | `dist(b, a) < a.radius` | Suma `a.points`, `explode()`, parte la roca. La estrella fugaz no se parte y suelta **siempre** `'cadencia'` o `'triple'` (50/50); el resto intenta `maybeDropPowerUp()` (14 %) |
+| Nave × power-up | `dist(ship, p) < ship.radius + p.radius` | `ship.speedTimer = 5` (`'velocidad'`), `ship.rapidTimer = 6` (`'cadencia'`) o `ship.tripleTimer = 5` (`'triple'`) + partículas |
 | Nave × asteroide | `dist(ship, a) < ship.radius + a.radius * 0.82` y `invincible ≤ 0` | `killShip()` (incluye la estrella fugaz) |
 
 Excepción importante: el mundo es **toroidal** (`wrap()` en cada movimiento), pero `dist()` es euclidiana, así que los objetos que se cruzan por los bordes **no colisionan**. Está documentado en `AGENTS.md` como limitación conocida.
@@ -196,7 +197,7 @@ flowchart LR
 - Cada asteroide grande destruido se parte en 2 medianos y cada mediano en 2 pequeños (`split()` devuelve `[]` en tamaño 1).
 - `spawnAsteroids()` evita el centro de la pantalla (`SAFE_DIST = 130`) para no matar al jugador al reaparecer.
 - Desde el nivel 2, `nextLevel()` añade además una **estrella fugaz** con `spawnShootingStar()`. Entra desde un borde, cuenta como asteroide (y por tanto para completar el nivel) y a los 8 s expira sola sin dar puntos.
-- Los boosts de **velocidad** y **cadencia** no sobreviven a `ship.reset()`: morir o cambiar de nivel los cancela.
+- Los boosts de **velocidad**, **cadencia** y **triple** no sobreviven a `ship.reset()`: morir o cambiar de nivel los cancela.
 
 ## Render
 
@@ -221,7 +222,7 @@ La silueta de la nave es **data-driven**: `SKINS` (`game.js:265-303`) guarda par
 Para agregar otro power-up (siguiendo el patrón actual):
 
 1. Añadir un campo de efecto en `Ship` (timer) y consumirlo en `Ship.update`.
-2. Añadir el nuevo valor a `PowerUp.type` y una rama en la colisión nave × power-up para asignar el timer (hoy hay `'velocidad'` y `'cadencia'`).
+2. Añadir el nuevo valor a `PowerUp.type` y una rama en la colisión nave × power-up para asignar el timer (hoy hay `'velocidad'`, `'cadencia'` y `'triple'`).
 3. Ajustar el `draw()` para diferenciarlo visualmente (color y símbolo).
 4. Documentar la mecánica en `README.md` (sección Power-ups) y el gotcha en `AGENTS.md`.
 

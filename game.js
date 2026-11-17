@@ -198,13 +198,15 @@ const POWERUP_TTL      = 14;     // segundos antes de desvanecerse
 const POWERUP_MAX      = 2;      // máximo de power-ups en pantalla
 const RAPID_DURATION   = 6;      // segundos de cadencia rápida
 const RAPID_COOLDOWN   = 0.08;   // segundos entre disparos con cadencia
+const TRIPLE_DURATION  = 5;      // segundos de disparo triple
+const TRIPLE_SEPARATION = 9;     // px a cada lado del centro entre las 3 balas
 
 class PowerUp {
   constructor(x, y, type = 'velocidad') {
     this.x = x;
     this.y = y;
     this.radius = 14;
-    this.type = type;   // 'velocidad' | 'cadencia'
+    this.type = type;   // 'velocidad' | 'cadencia' | 'triple'
     const angle = rand(0, Math.PI * 2);
     const speed = rand(12, 28);
     this.vx = Math.cos(angle) * speed;
@@ -225,11 +227,12 @@ class PowerUp {
     if (this.ttl < 3 && Math.floor(this.ttl * 6) % 2 === 0) return;
 
     const cadence = this.type === 'cadencia';
+    const triple  = this.type === 'triple';
     const pulse = 1 + Math.sin(performance.now() / 180) * 0.08;
     ctx.save();
     ctx.translate(this.x, this.y);
     ctx.scale(pulse, pulse);
-    ctx.strokeStyle = cadence ? '#fd4' : '#4df';
+    ctx.strokeStyle = cadence ? '#fd4' : triple ? '#8f8' : '#4df';
     ctx.lineWidth   = 2;
     ctx.lineJoin    = 'round';
 
@@ -243,6 +246,16 @@ class PowerUp {
       for (let i = -1; i <= 1; i++) {
         ctx.moveTo(i * 6, -6);
         ctx.lineTo(i * 6,  6);
+      }
+    } else if (triple) {
+      // Tres flechas paralelas: disparo triple
+      for (let i = -1; i <= 1; i++) {
+        const y = i * 6;
+        ctx.moveTo(-8, y);
+        ctx.lineTo( 6, y);
+        ctx.moveTo( 2, y - 4);
+        ctx.lineTo( 6, y);
+        ctx.lineTo( 2, y + 4);
       }
     } else {
       // Doble chevrón ">>"
@@ -360,6 +373,7 @@ class Ship {
     this.shootCooldown = 0;
     this.speedTimer    = 0;   // segundos restantes de "velocidad"
     this.rapidTimer    = 0;   // segundos restantes de "cadencia"
+    this.tripleTimer   = 0;   // segundos restantes de "triple"
     this.dead          = false;
   }
 
@@ -369,6 +383,7 @@ class Ship {
     if (this.shootCooldown > 0) this.shootCooldown -= dt;
     if (this.speedTimer    > 0) this.speedTimer    -= dt;
     if (this.rapidTimer    > 0) this.rapidTimer    -= dt;
+    if (this.tripleTimer   > 0) this.tripleTimer   -= dt;
 
     const ROT       = 3.5;    // rad/s
     const THRUST    = 260;    // px/s²
@@ -414,6 +429,15 @@ class Ship {
     const NOSE = 21;
     const ox = this.x + Math.cos(this.angle) * NOSE;
     const oy = this.y + Math.sin(this.angle) * NOSE;
+    if (this.tripleTimer > 0) {
+      // Tres balas paralelas: misma dirección, desplazadas en perpendicular
+      const px = Math.cos(this.angle + Math.PI / 2);
+      const py = Math.sin(this.angle + Math.PI / 2);
+      return [-1, 0, 1].map(k =>
+        new Bullet(ox + px * TRIPLE_SEPARATION * k,
+                   oy + py * TRIPLE_SEPARATION * k,
+                   this.angle));
+    }
     return [new Bullet(ox, oy, this.angle)];
   }
 
@@ -429,6 +453,7 @@ class Ship {
     ctx.rotate(this.angle);
     // Los boosts tiñen la nave por encima del color propio de la skin
     ctx.strokeStyle = this.rapidTimer > 0 ? '#fd4'
+                    : this.tripleTimer > 0 ? '#8f8'
                     : this.speedTimer > 0 ? '#4df'
                     : skin.color;
     ctx.lineWidth   = skin.linea;
@@ -630,7 +655,8 @@ function update(dt) {
         a.dead = true;
         score += a.points;
         explode(a.x, a.y, a.size * 5);
-        if (a instanceof ShootingStar) dropPowerUp(a.x, a.y, 'cadencia');
+        if (a instanceof ShootingStar)
+          dropPowerUp(a.x, a.y, Math.random() < 0.5 ? 'cadencia' : 'triple');
         else maybeDropPowerUp(a.x, a.y);
         newAsteroids.push(...a.split());
       }
@@ -644,6 +670,7 @@ function update(dt) {
     if (!p.dead && dist(ship, p) < ship.radius + p.radius) {
       p.dead = true;
       if (p.type === 'cadencia') ship.rapidTimer = RAPID_DURATION;
+      else if (p.type === 'triple') ship.tripleTimer = TRIPLE_DURATION;
       else                       ship.speedTimer = POWERUP_DURATION;
       explode(p.x, p.y, 8);
     }
@@ -697,17 +724,23 @@ function drawHUD() {
   for (let i = 0; i < lives; i++)
     drawLifeIcon(W - 16 - i * 22, 18);
 
-  if (state === 'playing' && ship.speedTimer > 0) {
+  if (state === 'playing') {
+    let y = 48;
     ctx.textAlign = 'left';
-    ctx.fillStyle = '#4df';
-    ctx.fillText(`VELOCIDAD ${ship.speedTimer.toFixed(1)}s`, 14, 48);
-  }
-
-  if (state === 'playing' && ship.rapidTimer > 0) {
-    ctx.textAlign = 'left';
-    ctx.fillStyle = '#fd4';
-    ctx.fillText(`CADENCIA ${ship.rapidTimer.toFixed(1)}s`, 14,
-                 ship.speedTimer > 0 ? 66 : 48);
+    if (ship.speedTimer > 0) {
+      ctx.fillStyle = '#4df';
+      ctx.fillText(`VELOCIDAD ${ship.speedTimer.toFixed(1)}s`, 14, y);
+      y += 18;
+    }
+    if (ship.rapidTimer > 0) {
+      ctx.fillStyle = '#fd4';
+      ctx.fillText(`CADENCIA ${ship.rapidTimer.toFixed(1)}s`, 14, y);
+      y += 18;
+    }
+    if (ship.tripleTimer > 0) {
+      ctx.fillStyle = '#8f8';
+      ctx.fillText(`TRIPLE ${ship.tripleTimer.toFixed(1)}s`, 14, y);
+    }
   }
 
   if (skinToast > 0) {
