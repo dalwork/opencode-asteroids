@@ -4,6 +4,7 @@ Static HTML5 canvas Asteroids clone. **No package manager, build, tests, linter,
 
 - `index.html` — page shell, fixed 800×600 canvas, loads `game.js` as a classic script.
 - `game.js` — the entire game: classes, state, collision, rendering, loop.
+- `ARCHITECTURE.md` — flowcharts (Mermaid) of the loop, `update()` per state, state machine and entity relations.
 - `favicon.svg` — icon only.
 
 ## Run / verify
