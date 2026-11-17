@@ -152,7 +152,7 @@ Contrato común: cada clase expone `update(dt)`, `draw()` y un flag booleano `de
 
 | Clase | Rol | Constantes asociadas |
 | --- | --- | --- |
-| `Ship` | Jugador: rota, acelera, dispara con cooldown | `ROT`, `THRUST`, `DRAG` dentro de `update()` |
+| `Ship` | Jugador: rota, acelera, dispara con cooldown | `ROT`, `THRUST`, `DRAG`, `REF_FPS`, `MAX_SPEED` dentro de `update()` |
 | `Bullet` | Proyectil de vida corta con `wrap()` | `SPEED = 520`, `ttl = 1.1` |
 | `Asteroid` | Roca poligonal irregular que se parte | `RADII`, `SPEEDS`, `POINTS` (`game.js:61-63`) |
 | `Particle` | Escombro visual, sin colisión | `life = 0.4–1.1 s` |
@@ -204,4 +204,4 @@ Para agregar otro power-up (siguiendo el patrón actual):
 3. Ajustar el `draw()` para diferenciarlo visualmente.
 4. Documentar la mecánica en `README.md` (sección Power-ups) y el gotcha en `AGENTS.md`.
 
-Para cambiar el balance: las constantes están agrupadas arriba de cada sección de `game.js`, y `DRAG`/`THRUST` están dentro de `Ship.update` — movelas con cuidado porque la física es dependiente del frame rate.
+Para cambiar el balance: las constantes están agrupadas arriba de cada sección de `game.js`, y las de la nave (`ROT`, `THRUST`, `DRAG`, `REF_FPS`, `MAX_SPEED`) están dentro de `Ship.update`. `DRAG` se normaliza a `REF_FPS = 60` (`Math.pow(DRAG, dt * REF_FPS)`), así que la física ya no depende del frame rate. `MAX_SPEED` limita la magnitud de la velocidad (×2 con boost) y no recorta la inercia cuando el power-up vence.

@@ -195,10 +195,16 @@ class Ship {
     if (this.shootCooldown > 0) this.shootCooldown -= dt;
     if (this.speedTimer    > 0) this.speedTimer    -= dt;
 
-    const ROT    = 3.5;   // rad/s
-    const THRUST = 260;   // px/s²
-    const DRAG   = 0.987;
-    const boost  = this.speedTimer > 0 ? POWERUP_MULT : 1;
+    const ROT       = 3.5;    // rad/s
+    const THRUST    = 260;    // px/s²
+    const DRAG      = 0.987;  // factor por frame a 60 fps
+    const REF_FPS   = 60;     // Hz de referencia para normalizar DRAG
+    const MAX_SPEED = 330;    // px/s; el boost lo multiplica por POWERUP_MULT
+    const boost = this.speedTimer > 0 ? POWERUP_MULT : 1;
+    const cap   = MAX_SPEED * boost;
+    // Si el boost acaba de vencer la nave queda por encima del tope: no la frenes
+    // de golpe, DRAG la hace decaer hasta que el tope vuelva a actuar.
+    const overCap = Math.hypot(this.vx, this.vy) > cap;
 
     if (keys['ArrowLeft'])  this.angle -= ROT * dt;
     if (keys['ArrowRight']) this.angle += ROT * dt;
@@ -209,8 +215,20 @@ class Ship {
       this.vy += Math.sin(this.angle) * THRUST * boost * dt;
     }
 
-    this.vx *= DRAG;
-    this.vy *= DRAG;
+    const drag = Math.pow(DRAG, dt * REF_FPS);
+    this.vx *= drag;
+    this.vy *= drag;
+
+    // Tope de magnitud (no por eje): la diagonal no queda más rápida
+    if (!overCap) {
+      const speed = Math.hypot(this.vx, this.vy);
+      if (speed > cap) {
+        const k = cap / speed;
+        this.vx *= k;
+        this.vy *= k;
+      }
+    }
+
     this.x = wrap(this.x + this.vx * dt, W);
     this.y = wrap(this.y + this.vy * dt, H);
   }
