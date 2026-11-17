@@ -24,11 +24,12 @@ Luego visita `http://localhost:3000`.
 
 ## Controles
 
-| Tecla     | Acción     |
-| --------- | ---------- |
-| `←` `→`   | Rotar nave |
-| `↑`       | Propulsar  |
-| `Espacio` | Disparar   |
+| Tecla     | Acción             |
+| --------- | ------------------ |
+| `←` `→`   | Rotar nave         |
+| `↑`       | Propulsar          |
+| `Espacio` | Disparar           |
+| `S`       | Cambiar skin (nave) |
 
 ## Puntuación
 
@@ -63,3 +64,19 @@ Desde el nivel 2 aparece **una** estrella fugaz por nivel. Entra desde un borde 
 - Vale **200 puntos** y siempre suelta el power-up **Cadencia** al ser destruida.
 - Si se desvanece por tiempo no da puntos ni recompensa.
 - Mientras siga en pantalla cuenta para completar el nivel, pero su desaparición automática evita que el nivel quede bloqueado.
+
+## Skins
+
+La nave tiene cuatro apariencias intercambiables. Pulsa `S` en cualquier momento (también en GAME OVER) para ciclar entre ellas; el nombre aparece unos segundos abajo en el HUD.
+
+| Skin           | Apariencia                                                        |
+| -------------- | ----------------------------------------------------------------- |
+| **Clásica**    | Triángulo wireframe blanco original, llama naranja                |
+| **Interceptor**| Caza de ala en flecha verde fósforo, llama verde                  |
+| **Acorazada**  | Casco hexagonal con relleno tenue magenta y dos motores            |
+| **Espectro**   | Dardo afilado violeta con cabina circular                         |
+
+- La skin elegida se guarda en `localStorage` y se restaura al recargar.
+- Solo cambia el aspecto: el hitbox, la física y el punto de salida de las balas son idénticos en las cuatro.
+- Los power-ups siguen tiñendo la nave (celeste Velocidad, ámbar Cadencia) por encima del color de la skin.
+- Los iconos de vida del HUD usan la silueta y el color de la skin activa.
