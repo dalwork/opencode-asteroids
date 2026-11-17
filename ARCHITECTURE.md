@@ -208,6 +208,14 @@ partículas → asteroides → balas → power-ups → nave → HUD → overlay 
 
 Cada entidad se dibuja con `ctx.save()` / `translate` / `rotate` / `stroke` / `ctx.restore()`, en estilo wireframe blanco. Las excepciones de color son los power-ups y la estrella fugaz (`#4df` para velocidad, `#fd4` para cadencia y estrella), y la nave se tiñe igual mientras dura cada boost.
 
+### Skins de la nave
+
+La silueta de la nave es **data-driven**: `SKINS` (`game.js:265-303`) guarda para cada skin su nombre, color, grosor, polígono (`verts` con la nariz en `+x`), relleno opcional, detalles y motores (`llamas`). `traceShipPath(skin, scale)` traza ese polígono y lo comparten `Ship.draw()` y `drawLifeIcon()`, así que los iconos de vida reflejan la skin activa.
+
+- `skinIndex` es global, se carga de `localStorage` (`asteroids.skin`) y cicla con `S` al inicio de `update()`, antes de los returns de estado. Por eso también funciona en `'dead'` y `'gameover'`.
+- El cambio muestra un aviso (`SKIN: NOMBRE`) durante `SKIN_TOAST = 1.6 s`.
+- La skin solo cambia el dibujo: `Ship.radius = 12` y `NOSE = 21` son constantes compartidas por todas, igual que la física. Con boost activo, el color del power-up pisa el color de la skin.
+
 ## Cómo extender
 
 Para agregar otro power-up (siguiendo el patrón actual):
@@ -216,5 +224,7 @@ Para agregar otro power-up (siguiendo el patrón actual):
 2. Añadir el nuevo valor a `PowerUp.type` y una rama en la colisión nave × power-up para asignar el timer (hoy hay `'velocidad'` y `'cadencia'`).
 3. Ajustar el `draw()` para diferenciarlo visualmente (color y símbolo).
 4. Documentar la mecánica en `README.md` (sección Power-ups) y el gotcha en `AGENTS.md`.
+
+Para añadir otra skin: agregar un objeto a `SKINS` con `nombre`, `color`, `linea`, `verts`, `llamas` y `llamaColor` (y `relleno`/`detalle` si hace falta). No hay que tocar el dibujo ni el input: el ciclo de `S` usa `SKINS.length`. Mantén la nariz en `x ≤ 20` para que las balas sigan saliendo por delante.
 
 Para cambiar el balance: las constantes están agrupadas arriba de cada sección de `game.js`, y las de la nave (`ROT`, `THRUST`, `DRAG`, `REF_FPS`, `MAX_SPEED`) están dentro de `Ship.update`. `DRAG` se normaliza a `REF_FPS = 60` (`Math.pow(DRAG, dt * REF_FPS)`), así que la física ya no depende del frame rate. `MAX_SPEED` limita la magnitud de la velocidad (×2 con boost) y no recorta la inercia cuando el power-up vence.
