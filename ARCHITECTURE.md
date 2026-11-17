@@ -9,7 +9,7 @@ Documento de referencia de **cómo está armado y cómo fluye** el juego. Para e
 | Archivo | Contenido |
 | --- | --- |
 | `index.html` | Canvas fijo 800×600 y `<script src="game.js">` (script clásico, sin módulos) |
-| `game.js` | Input, utilidades, 5 clases, estado global, update, draw y loop |
+| `game.js` | Input, utilidades, 6 clases, estado global, update, draw y loop |
 | `favicon.svg` | Ícono |
 
 Todo vive en **un único scope global**: las clases y funciones se referencian directamente entre sí, sin imports.
@@ -61,7 +61,7 @@ flowchart TD
     DE3 -->|"no"| DER["return"]
     DE4 --> DER
 
-    S -->|"playing"| P1["input: ¿Space? → ship.tryShoot()"]
+    S -->|"playing"| P1["input: ¿Space? → ship.tryShoot()<br/>(cadencia activa: mantener Space)"]
     P1 --> P2["integración:<br/>ship, bullets, asteroids, particles, powerups"]
     P2 --> P3["filtra entidades con dead = true"]
     P3 --> C1["colisión bala × asteroide"]
@@ -73,7 +73,7 @@ flowchart TD
     P5 --> FIN
 ```
 
-> En `'dead'`, la nave y las balas quedan **congeladas**: las balas siguen dibujadas en pantalla pero nadie las actualiza, y solo siguen moviéndose asteroides, partículas y power-ups.
+> En `'dead'`, la nave y las balas quedan **congeladas**: las balas siguen dibujadas en pantalla pero nadie las actualiza, y solo siguen moviéndose asteroides, partículas y power-ups. Los asteroides con `dead = true` (por ejemplo una estrella fugaz expirada) se filtran también aquí para que no queden dibujados.
 
 ## Máquina de estados
 
@@ -106,6 +106,7 @@ classDiagram
       +angle
       +invincible
       +speedTimer
+      +rapidTimer
       +thrusting
       +update(dt)
       +tryShoot()
@@ -124,9 +125,16 @@ classDiagram
       +y
       +size
       +radius
+      +points
       +verts
       +update(dt)
       +split()
+    }
+    class ShootingStar {
+      +ttl
+      +update(dt)
+      +split()
+      +draw()
     }
     class Particle {
       +x
@@ -140,12 +148,15 @@ classDiagram
       +x
       +y
       +radius
+      +type
       +ttl
       +update(dt)
     }
     Ship ..> Bullet : tryShoot()
     Asteroid ..> Asteroid : split() crea 2
-    PowerUp ..> Ship : speedTimer = 5
+    ShootingStar --|> Asteroid : hereda
+    ShootingStar ..> PowerUp : suelta "cadencia"
+    PowerUp ..> Ship : speedTimer / rapidTimer
 ```
 
 Contrato común: cada clase expone `update(dt)`, `draw()` y un flag booleano `dead`. El `update` global llama a todas y luego hace `array = array.filter(e => !e.dead)` — no se eliminan objetos a mitad de iteración.
@@ -155,8 +166,9 @@ Contrato común: cada clase expone `update(dt)`, `draw()` y un flag booleano `de
 | `Ship` | Jugador: rota, acelera, dispara con cooldown | `ROT`, `THRUST`, `DRAG`, `REF_FPS`, `MAX_SPEED` dentro de `update()` |
 | `Bullet` | Proyectil de vida corta con `wrap()` | `SPEED = 520`, `ttl = 1.1` |
 | `Asteroid` | Roca poligonal irregular que se parte | `RADII`, `SPEEDS`, `POINTS` (`game.js:61-63`) |
+| `ShootingStar` | Asteroide especial rápido que se desvanece y suelta cadencia | `STAR_*` (`game.js:122-126`) |
 | `Particle` | Escombro visual, sin colisión | `life = 0.4–1.1 s` |
-| `PowerUp` | Bonus "velocidad" flotante | `POWERUP_*` (`game.js:122-126`) |
+| `PowerUp` | Bonus flotante de velocidad o cadencia | `POWERUP_*`, `RAPID_*` (`game.js:194-200`) |
 
 ## Colisiones
 
@@ -164,9 +176,9 @@ Todo se resuelve cada frame en `update()`, con distancia entre centros (`dist()`
 
 | Colisión | Condición | Efecto |
 | --- | --- | --- |
-| Bala × asteroide | `dist(b, a) < a.radius` | Suma `POINTS[size]`, `explode()`, intenta `maybeDropPowerUp()` (14 %), parte la roca |
-| Nave × power-up | `dist(ship, p) < ship.radius + p.radius` | `ship.speedTimer = 5` + partículas |
-| Nave × asteroide | `dist(ship, a) < ship.radius + a.radius * 0.82` y `invincible ≤ 0` | `killShip()` |
+| Bala × asteroide | `dist(b, a) < a.radius` | Suma `a.points`, `explode()`, parte la roca. La estrella fugaz no se parte y suelta **siempre** `'cadencia'`; el resto intenta `maybeDropPowerUp()` (14 %) |
+| Nave × power-up | `dist(ship, p) < ship.radius + p.radius` | `ship.speedTimer = 5` (`'velocidad'`) o `ship.rapidTimer = 6` (`'cadencia'`) + partículas |
+| Nave × asteroide | `dist(ship, a) < ship.radius + a.radius * 0.82` y `invincible ≤ 0` | `killShip()` (incluye la estrella fugaz) |
 
 Excepción importante: el mundo es **toroidal** (`wrap()` en cada movimiento), pero `dist()` es euclidiana, así que los objetos que se cruzan por los bordes **no colisionan**. Está documentado en `AGENTS.md` como limitación conocida.
 
@@ -183,7 +195,8 @@ flowchart LR
 
 - Cada asteroide grande destruido se parte en 2 medianos y cada mediano en 2 pequeños (`split()` devuelve `[]` en tamaño 1).
 - `spawnAsteroids()` evita el centro de la pantalla (`SAFE_DIST = 130`) para no matar al jugador al reaparecer.
-- El boost de velocidad **no sobrevive** a `ship.reset()`: morir o cambiar de nivel lo cancela.
+- Desde el nivel 2, `nextLevel()` añade además una **estrella fugaz** con `spawnShootingStar()`. Entra desde un borde, cuenta como asteroide (y por tanto para completar el nivel) y a los 8 s expira sola sin dar puntos.
+- Los boosts de **velocidad** y **cadencia** no sobreviven a `ship.reset()`: morir o cambiar de nivel los cancela.
 
 ## Render
 
@@ -193,15 +206,15 @@ flowchart LR
 partículas → asteroides → balas → power-ups → nave → HUD → overlay (solo gameover)
 ```
 
-Cada entidad se dibuja con `ctx.save()` / `translate` / `rotate` / `stroke` / `ctx.restore()`, en estilo wireframe blanco; los power-ups son la única excepción de color (`#4df`) y la nave se tiñe igual mientras dura el boost.
+Cada entidad se dibuja con `ctx.save()` / `translate` / `rotate` / `stroke` / `ctx.restore()`, en estilo wireframe blanco. Las excepciones de color son los power-ups y la estrella fugaz (`#4df` para velocidad, `#fd4` para cadencia y estrella), y la nave se tiñe igual mientras dura cada boost.
 
 ## Cómo extender
 
 Para agregar otro power-up (siguiendo el patrón actual):
 
 1. Añadir un campo de efecto en `Ship` (timer) y consumirlo en `Ship.update`.
-2. Darle un tipo/identidad a `PowerUp` para elegir el efecto al recoger (hoy el efecto está hardcodeado en la colisión).
-3. Ajustar el `draw()` para diferenciarlo visualmente.
+2. Añadir el nuevo valor a `PowerUp.type` y una rama en la colisión nave × power-up para asignar el timer (hoy hay `'velocidad'` y `'cadencia'`).
+3. Ajustar el `draw()` para diferenciarlo visualmente (color y símbolo).
 4. Documentar la mecánica en `README.md` (sección Power-ups) y el gotcha en `AGENTS.md`.
 
 Para cambiar el balance: las constantes están agrupadas arriba de cada sección de `game.js`, y las de la nave (`ROT`, `THRUST`, `DRAG`, `REF_FPS`, `MAX_SPEED`) están dentro de `Ship.update`. `DRAG` se normaliza a `REF_FPS = 60` (`Math.pow(DRAG, dt * REF_FPS)`), así que la física ya no depende del frame rate. `MAX_SPEED` limita la magnitud de la velocidad (×2 con boost) y no recorta la inercia cuando el power-up vence.

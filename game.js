@@ -68,6 +68,7 @@ class Asteroid {
     this.y    = y;
     this.size = size;
     this.radius = RADII[size];
+    this.points = POINTS[size];
     this.dead = false;
 
     const angle = rand(0, Math.PI * 2);
@@ -118,18 +119,92 @@ class Asteroid {
   }
 }
 
-// ── Power-up "Velocidad" ──────────────────────────────────────────────────────
+// ── Estrella fugaz (asteroide especial) ───────────────────────────────────────
+const STAR_SPEED  = 250;   // px/s, mucho más rápida que un asteroide normal
+const STAR_RADIUS = 16;    // igual al asteroide pequeño
+const STAR_TTL    = 8;     // segundos antes de desvanecerse sola
+const STAR_POINTS = 200;   // recompensa por derribarla
+
+class ShootingStar extends Asteroid {
+  constructor(x, y, angle) {
+    super(x, y, 1);
+    this.radius   = STAR_RADIUS;
+    this.points   = STAR_POINTS;
+    this.ttl      = STAR_TTL;
+    this.rot      = angle;   // la punta de la estrella mira hacia donde vuela
+    this.rotSpeed = 0;
+    this.vx = Math.cos(angle) * STAR_SPEED;
+    this.vy = Math.sin(angle) * STAR_SPEED;
+
+    // Estrella de 5 puntas
+    const n = 10;
+    this.verts = [];
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      const r = this.radius * (i % 2 === 0 ? 1 : 0.42);
+      this.verts.push([Math.cos(a) * r, Math.sin(a) * r]);
+    }
+  }
+
+  update(dt) {
+    super.update(dt);
+    this.ttl -= dt;
+    if (this.ttl <= 0) {
+      this.dead = true;
+      explode(this.x, this.y, 6);
+    }
+  }
+
+  split() { return []; }
+
+  draw() {
+    // Parpadeo antes de desvanecerse
+    if (this.ttl < 2 && Math.floor(this.ttl * 6) % 2 === 0) return;
+
+    // Estela detrás del movimiento
+    const ux = this.vx / STAR_SPEED;
+    const uy = this.vy / STAR_SPEED;
+    ctx.lineWidth = 2;
+    for (let i = 1; i <= 3; i++) {
+      const d = 10 * i;
+      ctx.strokeStyle = `rgba(255, 221, 68, ${(0.45 / i).toFixed(2)})`;
+      ctx.beginPath();
+      ctx.moveTo(this.x - ux * d, this.y - uy * d);
+      ctx.lineTo(this.x - ux * (d + 7), this.y - uy * (d + 7));
+      ctx.stroke();
+    }
+
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.rot);
+    ctx.strokeStyle = '#fd4';
+    ctx.lineWidth   = 1.5;
+    ctx.lineJoin    = 'round';
+    ctx.beginPath();
+    ctx.moveTo(this.verts[0][0], this.verts[0][1]);
+    for (let i = 1; i < this.verts.length; i++)
+      ctx.lineTo(this.verts[i][0], this.verts[i][1]);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+// ── Power-ups ─────────────────────────────────────────────────────────────────
 const POWERUP_DURATION = 5;      // segundos de doble velocidad
 const POWERUP_MULT     = 2;      // multiplicador de empuje
 const POWERUP_CHANCE   = 0.14;   // probabilidad de caer al destruir un asteroide
 const POWERUP_TTL      = 14;     // segundos antes de desvanecerse
 const POWERUP_MAX      = 2;      // máximo de power-ups en pantalla
+const RAPID_DURATION   = 6;      // segundos de cadencia rápida
+const RAPID_COOLDOWN   = 0.08;   // segundos entre disparos con cadencia
 
 class PowerUp {
-  constructor(x, y) {
+  constructor(x, y, type = 'velocidad') {
     this.x = x;
     this.y = y;
     this.radius = 14;
+    this.type = type;   // 'velocidad' | 'cadencia'
     const angle = rand(0, Math.PI * 2);
     const speed = rand(12, 28);
     this.vx = Math.cos(angle) * speed;
@@ -149,11 +224,12 @@ class PowerUp {
     // Parpadeo antes de desaparecer
     if (this.ttl < 3 && Math.floor(this.ttl * 6) % 2 === 0) return;
 
+    const cadence = this.type === 'cadencia';
     const pulse = 1 + Math.sin(performance.now() / 180) * 0.08;
     ctx.save();
     ctx.translate(this.x, this.y);
     ctx.scale(pulse, pulse);
-    ctx.strokeStyle = '#4df';
+    ctx.strokeStyle = cadence ? '#fd4' : '#4df';
     ctx.lineWidth   = 2;
     ctx.lineJoin    = 'round';
 
@@ -161,10 +237,18 @@ class PowerUp {
     ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
     ctx.stroke();
 
-    // Doble chevrón ">>"
     ctx.beginPath();
-    ctx.moveTo(-8, -6); ctx.lineTo( 0, 0); ctx.lineTo(-8, 6);
-    ctx.moveTo( 1, -6); ctx.lineTo( 9, 0); ctx.lineTo( 1, 6);
+    if (cadence) {
+      // Tres barras verticales: disparo continuo
+      for (let i = -1; i <= 1; i++) {
+        ctx.moveTo(i * 6, -6);
+        ctx.lineTo(i * 6,  6);
+      }
+    } else {
+      // Doble chevrón ">>"
+      ctx.moveTo(-8, -6); ctx.lineTo( 0, 0); ctx.lineTo(-8, 6);
+      ctx.moveTo( 1, -6); ctx.lineTo( 9, 0); ctx.lineTo( 1, 6);
+    }
     ctx.stroke();
 
     ctx.restore();
@@ -172,6 +256,8 @@ class PowerUp {
 }
 
 // ── Ship ──────────────────────────────────────────────────────────────────────
+const SHOOT_COOLDOWN = 0.2;   // segundos entre disparos normales
+
 class Ship {
   constructor() { this.reset(); }
 
@@ -186,6 +272,7 @@ class Ship {
     this.invincible    = 3;
     this.shootCooldown = 0;
     this.speedTimer    = 0;   // segundos restantes de "velocidad"
+    this.rapidTimer    = 0;   // segundos restantes de "cadencia"
     this.dead          = false;
   }
 
@@ -194,6 +281,7 @@ class Ship {
     if (this.invincible    > 0) this.invincible    -= dt;
     if (this.shootCooldown > 0) this.shootCooldown -= dt;
     if (this.speedTimer    > 0) this.speedTimer    -= dt;
+    if (this.rapidTimer    > 0) this.rapidTimer    -= dt;
 
     const ROT       = 3.5;    // rad/s
     const THRUST    = 260;    // px/s²
@@ -235,7 +323,7 @@ class Ship {
 
   tryShoot() {
     if (this.shootCooldown > 0 || this.dead) return [];
-    this.shootCooldown = 0.2;
+    this.shootCooldown = this.rapidTimer > 0 ? RAPID_COOLDOWN : SHOOT_COOLDOWN;
     const NOSE = 21;
     const ox = this.x + Math.cos(this.angle) * NOSE;
     const oy = this.y + Math.sin(this.angle) * NOSE;
@@ -250,7 +338,9 @@ class Ship {
     ctx.save();
     ctx.translate(this.x, this.y);
     ctx.rotate(this.angle);
-    ctx.strokeStyle = this.speedTimer > 0 ? '#4df' : '#fff';
+    ctx.strokeStyle = this.rapidTimer > 0 ? '#fd4'
+                    : this.speedTimer > 0 ? '#4df'
+                    : '#fff';
     ctx.lineWidth   = 1.5;
     ctx.lineJoin    = 'round';
 
@@ -327,6 +417,22 @@ function spawnAsteroids(count) {
   }
 }
 
+// Entra desde un borde y cruza la pantalla como una estrella fugaz
+function spawnShootingStar() {
+  const edge = randInt(0, 3);
+  let x, y, angle;
+  if (edge === 0) {          // superior
+    x = rand(0, W); y = 0;              angle = Math.PI / 2 + rand(-0.6, 0.6);
+  } else if (edge === 1) {   // derecha
+    x = W;          y = rand(0, H);     angle = Math.PI + rand(-0.6, 0.6);
+  } else if (edge === 2) {   // inferior
+    x = rand(0, W); y = H;              angle = -Math.PI / 2 + rand(-0.6, 0.6);
+  } else {                   // izquierda
+    x = 0;          y = rand(0, H);     angle = rand(-0.6, 0.6);
+  }
+  asteroids.push(new ShootingStar(x, y, angle));
+}
+
 function initGame() {
   ship          = new Ship();
   bullets   = [];
@@ -347,6 +453,7 @@ function nextLevel() {
   powerups  = [];
   ship.reset();
   spawnAsteroids(3 + level);
+  if (level >= 2) spawnShootingStar();   // una estrella fugaz por nivel desde el 2
 }
 
 function explode(x, y, count = 8) {
@@ -355,7 +462,12 @@ function explode(x, y, count = 8) {
 
 function maybeDropPowerUp(x, y) {
   if (powerups.length >= POWERUP_MAX) return;
-  if (Math.random() < POWERUP_CHANCE) powerups.push(new PowerUp(x, y));
+  if (Math.random() < POWERUP_CHANCE) dropPowerUp(x, y, 'velocidad');
+}
+
+// La recompensa de la estrella fugaz es fija: ignora azar y tope de power-ups.
+function dropPowerUp(x, y, type) {
+  powerups.push(new PowerUp(x, y, type));
 }
 
 function killShip() {
@@ -384,14 +496,17 @@ function update(dt) {
     particles.forEach(p => p.update(dt));
     particles = particles.filter(p => !p.dead);
     asteroids.forEach(a => a.update(dt));
+    asteroids = asteroids.filter(a => !a.dead);
     powerups.forEach(p => p.update(dt));
     powerups = powerups.filter(p => !p.dead);
     if (deadTimer <= 0) { state = 'playing'; ship.reset(); }
     return;
   }
 
-  // Disparar
-  if (pressed('Space')) {
+  // Disparar: con cadencia basta mantener Espacio. pressed() se consume siempre
+  // para no dejar justPressed pendiente cuando termina el efecto.
+  const firePressed = pressed('Space');
+  if (ship.rapidTimer > 0 ? keys['Space'] : firePressed) {
     bullets.push(...ship.tryShoot());
   }
 
@@ -412,9 +527,10 @@ function update(dt) {
       if (!a.dead && !b.dead && dist(b, a) < a.radius) {
         b.dead = true;
         a.dead = true;
-        score += POINTS[a.size];
+        score += a.points;
         explode(a.x, a.y, a.size * 5);
-        maybeDropPowerUp(a.x, a.y);
+        if (a instanceof ShootingStar) dropPowerUp(a.x, a.y, 'cadencia');
+        else maybeDropPowerUp(a.x, a.y);
         newAsteroids.push(...a.split());
       }
     }
@@ -426,7 +542,8 @@ function update(dt) {
   for (const p of powerups) {
     if (!p.dead && dist(ship, p) < ship.radius + p.radius) {
       p.dead = true;
-      ship.speedTimer = POWERUP_DURATION;
+      if (p.type === 'cadencia') ship.rapidTimer = RAPID_DURATION;
+      else                       ship.speedTimer = POWERUP_DURATION;
       explode(p.x, p.y, 8);
     }
   }
@@ -481,6 +598,13 @@ function drawHUD() {
     ctx.textAlign = 'left';
     ctx.fillStyle = '#4df';
     ctx.fillText(`VELOCIDAD ${ship.speedTimer.toFixed(1)}s`, 14, 48);
+  }
+
+  if (state === 'playing' && ship.rapidTimer > 0) {
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#fd4';
+    ctx.fillText(`CADENCIA ${ship.rapidTimer.toFixed(1)}s`, 14,
+                 ship.speedTimer > 0 ? 66 : 48);
   }
 }
 
